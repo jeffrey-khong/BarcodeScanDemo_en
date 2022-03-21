@@ -1,0 +1,193 @@
+<! DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html lang=ja>
+<head>
+<title>Barcode Scan Demo Ver.1.0.0</title>
+<!--
+// AppName= "Barcode Scan Demo"
+// Version= "1.0.0"
+// Comment= "2015年12月21日社内勉強会向け"
+// Comment= "Translated to English on 12/Mar/2016"
+-->
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0" />
+<style type="text/css">
+<!--
+body,table,tr,td,input,a,p,div,span,button,select,option{font-size:large;font-family:sans-serif;}
+html,body		{text-align:center;}
+button			{background-color:#eeeeee;color:#000000;border-color:#f1f1f1;}
+input[type="button"]	{-webkit-border-radius:0;}
+td			{border-style:solid;border-color:#f1f1f1;border-width:0px 0px 1px 0px;display:block;overflow:hidden;}
+label			{display:block;float:left;vertical-align:middle;white-space:nowrap;height:2em;line-height:2em;}
+#scanButton	{width:100%;height:100%;max-height:3em;}
+#copyLabel	{width:20%;height:2em;float:left;}
+#clearList	{width:auto;height:2em;float:right;}
+#scanList	{border:2px #000000 solid;border-collapse:collapse;width:98%;height:96%;}
+#layoutbox1	{width:100%;height:100%;}
+#layoutbox1a	{width:100%;height:10%;}
+#layoutbox1b	{width:100%;height:75%;overflow-y:scroll;}
+#layoutbox1c	{width:100%;height:15%;max-height:3em;display:block;float:bottom;}
+-->
+</style>
+</head>
+<body id="main">
+<div id="layoutbox1">
+	<div id="layoutbox1a">
+		<label for="copyLabel"><input id="copyLabel" type="checkbox" onclick="copyLabel_changed(this.checked);">Label Printing</label>
+		<input id="clearList" type="button" value="Clear" onClick="clearList();">
+	</div>
+	<div id="layoutbox1b">
+		<table id="scanList" name="scanList">
+			<tr><td>　</td></tr>
+			<tr><td>　</td></tr>
+			<tr><td>　</td></tr>
+			<tr><td>　</td></tr>
+			<tr><td>　</td></tr>
+			<tr><td>　</td></tr>
+			<tr><td>　</td></tr>
+			<tr><td>　</td></tr>
+			<tr><td>　</td></tr>
+			<tr><td>　</td></tr>
+		</table>
+	</div>
+	<div id="layoutbox1c">
+		<input id="scanButton" type="button" value="Scan" onClick="openBarcodeReader();"><br>
+	</div>
+</div>
+<script language="javascript">
+<!-- 
+//【関数：バーコードリーダーを実行する】 - function: open barcode reader
+function openBarcodeReader() {
+	var copyLabel = document.getElementById('copyLabel');	//コピーラベル発行のチェック状態を取得 - verify label printing check
+
+	//「smapri-ext://」のURLスキームでバーコードリーダーを呼出す - call barcode reader using mspri-ex:// URL scheme
+	if(copyLabel.checked === false){
+		location.href='smapri-ext://scan/func?name=addListbox';	//リストに追加のみ行う - add to the list only
+	}else{
+		location.href='smapri-ext://scan/func?name=printBarcodeCopyLabel';	//リストに追加してラベル発行する - add to the list and print label
+	}
+}
+
+//【関数：リストに追加を行う】 - function: adding value to the list 
+function addListbox(value) {
+	// IDからリストを取得 - obtain ID from the list
+	var scanList = document.getElementById('scanList');
+
+	//リストの一番下を削除して、一番上に行・セルを追加 - delete the last row, add new row at top
+	scanList.deleteRow(9);
+	var row = scanList.insertRow(0);
+	var cell1 = row.insertCell(0);
+
+	// セルの内容入力 - set value
+	cell1.innerHTML = value;
+
+	//ローカルストレージを更新 - update local storage
+	saveStorage();
+
+}
+
+//【関数：バーコードコピーラベルの印刷】 - function: label printing
+function printBarcodeCopyLabel(value) {
+	//URLスキームで画面遷移するため、発行指示後のレスポンスはここでは取得しない(できない) - unable to obtain response after label printing at here due to URL scheme app switch
+
+	//読取りデータが無い場合は何もしない - do nothing if length of scanned data is 0 
+	if (value.length == 0){
+		addListbox('Scanned blank data (length of scanned data is 0 digit)');
+		return false;
+	}
+
+	//読取り結果をリストに追加する - add the value to the list
+	addListbox(value);
+
+	//フォーマットファイルとの紐づけを説明 - logic for deciding label format
+	//読取りデータに応じて「JAN8/JAN13/QRコード」のどれかで印刷する - print EAN8/EAN13/QR code depend scanned data
+	if (value.length == 8 && isNaN(value) == false){
+		//valueが8桁かつ数字で構成されている場合はJAN8で印刷する - if scanned data is 8 digits numeric, print EAN8 barcode
+		smapri_format_print(1,value);
+
+	}else if (value.length == 13 && isNaN(value) == false){
+		//valueが13桁かつ数字で構成されている場合はJAN13で印刷する - if scanned data is 13 digits numeric, print EAN13 barcode
+		smapri_format_print(2,value);
+
+	}else{
+		//valueがJAN8/13とみなせない場合はQRコードで印刷する - if scanned data is not 8 or 13 digits numeric, print QR code
+		value = encodeURIComponent(value);	//日本語やバイナリを含む可能性があるためエンコードしてからSmaPriに渡す - encoding the scanned value as the data may contains 2 bytes char
+		smapri_format_print(3,value);
+	}
+}
+
+//【関数：フォーマットNoで発行】 - function: print label with format no
+function smapri_format_print(fmt_num, variable1) {
+
+	//指定されたフォーマットNoと変数データををリクエスト文にセット - set format number and variable to the request statement
+	var request_string  = "smapri:/Format/Print?__format_id_number=" + fmt_num + "&barcode=" + variable1;
+
+	var redirect_url;	//リダイレクトURLを設定する - set redirect URL
+	redirect_url = encodeURIComponent("smapri-webview:/file:///BarcodeScanDemo/index.html");	//SmaPriBrowserのURLスキーム＋現在ページのファイル名 - SmaPriBrowser URL scheme + current page file name
+	redirect_url = "&__success_redirect_url=" + redirect_url + "&__failure_redirect_url=" + redirect_url;	//リダイレクトURLのリクエスト文を生成する - genearte redirect URL request statement
+
+	request_string = request_string + redirect_url;
+
+
+	//生成したリクエストの実行 - execute the generated redirect
+	location.href = request_string;
+}
+
+
+
+//【関数：コピーラベルのチェックON/OFFを検知、ローカルストレージに保存する】 - function: verify label printing check, store into local storage
+function copyLabel_changed(checked_status){
+	window.localStorage.setItem('copyLabel', checked_status);
+}
+
+//【関数：表示内容を初期化する】 - function: initilise the page
+function clearList() {
+	for(var i = 0; i < 10; i++){addListbox('　');}	//画面上のリストを全て削除する - truncate the list
+	window.localStorage.clear();	//ローカルストレージを全て削除する - clear the data in the local stroage
+	document.getElementById('copyLabel').checked = false;	//チェックボックスを初期値に戻す - uncheck the label printing checkbox
+}
+
+//【関数：リストの内容をローカルストレージに保存】 - function: store contents of the list into local storage
+function saveStorage() {
+	var scanList = document.getElementById('scanList');
+
+	//リストの内容を保存する(キー：0から9、値：画面上のスキャン結果に従う) - save contentns of the list (key: from 0 to 9, value: follow the scanned result)
+	for(var i = 0; i < 10; i++){
+		window.localStorage.setItem(String(i), scanList.rows[i].cells[0].innerText);
+	}
+}
+
+//【関数：リストの内容をローカルストレージから読み出し】 - function: read contents of the list from local storage
+function loadStorage(){
+	//コピーラベル発行のチェックON/OFFを取得する(ローカルストレージに値が無ければ何もしない) - obtain label printing check from local storage (do nothing if no value in the local storage) 
+	var copyLabelChecked = window.localStorage.getItem('copyLabel');
+	if(copyLabelChecked === 'true' || copyLabelChecked === 'false'){
+		if(copyLabelChecked === 'true') copyLabelChecked = Boolean(1);
+		if(copyLabelChecked === 'false') copyLabelChecked = Boolean(0);
+		document.getElementById('copyLabel').checked = copyLabelChecked;
+	}
+
+	//リストの内容を取得する(キーが0から9のもの。ローカルストレージに値が無ければ空白がセットされる) - obtain data for the list from local storage (key between 0 and 9. leave the list empty if no values in the local storage)
+	var str1;
+	var scanList = document.getElementById('scanList');
+
+	for(var i = 0; i < 10; i++){
+		str1 = window.localStorage.getItem(String(i));
+
+		//リストの一番下を削除して、一番上に行・セルを追加 - delete the last row, add new row at top
+		scanList.deleteRow(9);
+		var row = scanList.insertRow(i);
+		var cell1 = row.insertCell(0);
+
+		// セルの内容入力 - set value
+		cell1.innerHTML = str1;
+	}
+}
+
+//【ロード時の処理】 - page load 
+
+	// ローカルストレージの値を読み出す - read data from local storage
+	loadStorage();
+-->
+</script>
+</body>
+</html>
